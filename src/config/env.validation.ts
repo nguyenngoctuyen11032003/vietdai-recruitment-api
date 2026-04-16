@@ -29,7 +29,9 @@ const toNumber = (value: unknown, fallback: number): number => {
 };
 
 export const validateEnv = (config: EnvInput): EnvInput => {
-  const nodeEnv = (config.NODE_ENV as string | undefined) ?? 'development';
+  const nodeEnv =
+    (config.NODE_ENV as string | undefined) ??
+    (process.env.JEST_WORKER_ID ? 'test' : 'development');
   const databaseUrl = config.DATABASE_URL as string | undefined;
 
   if (!['development', 'test', 'production'].includes(nodeEnv)) {
@@ -55,4 +57,5 @@ export const validateEnv = (config: EnvInput): EnvInput => {
     DB_RUN_MIGRATIONS: toBoolean(config.DB_RUN_MIGRATIONS, false),
   };
 };
+
 

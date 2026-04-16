@@ -23,4 +23,3 @@ export default new DataSource({
       : 'dist/database/migrations/*.js',
   ],
 });
-

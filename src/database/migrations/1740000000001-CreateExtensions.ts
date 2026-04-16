@@ -51,4 +51,3 @@ export class CreateExtensions1740000000001 implements MigrationInterface {
     `);
   }
 }
-

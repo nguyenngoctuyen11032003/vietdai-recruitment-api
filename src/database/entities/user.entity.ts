@@ -16,22 +16,23 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 255, unique: true })
   email!: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ name: 'password_hash', type: 'varchar', length: 255 })
   passwordHash!: string;
 
-  @Column({ type: 'varchar', length: 120 })
+  @Column({ name: 'full_name', type: 'varchar', length: 120 })
   fullName!: string;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 
   @OneToMany(() => ApplicationEntity, (application) => application.reviewer)
   reviewedApplications!: ApplicationEntity[];
 }
+
 

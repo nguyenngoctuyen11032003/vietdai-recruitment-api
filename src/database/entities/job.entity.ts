@@ -10,7 +10,9 @@ import {
 import { ApplicationEntity } from './application.entity';
 
 @Entity({ name: 'jobs' })
-@Check('"salary_min" IS NULL OR "salary_max" IS NULL OR "salary_min" <= "salary_max"')
+@Check(
+  '"salary_min" IS NULL OR "salary_max" IS NULL OR "salary_min" <= "salary_max"',
+)
 export class JobEntity {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: string;
@@ -24,10 +26,10 @@ export class JobEntity {
   @Column({ type: 'varchar', length: 120 })
   location!: string;
 
-  @Column({ type: 'integer', nullable: true })
+  @Column({ name: 'salary_min', type: 'integer', nullable: true })
   salaryMin!: number | null;
 
-  @Column({ type: 'integer', nullable: true })
+  @Column({ name: 'salary_max', type: 'integer', nullable: true })
   salaryMax!: number | null;
 
   @Column({ type: 'char', length: 3, default: 'VND' })
@@ -36,16 +38,17 @@ export class JobEntity {
   @Column({ type: 'varchar', length: 20, default: 'draft' })
   status!: string;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ name: 'published_at', type: 'timestamptz', nullable: true })
   publishedAt!: Date | null;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 
   @OneToMany(() => ApplicationEntity, (application) => application.job)
   applications!: ApplicationEntity[];
 }
+
 

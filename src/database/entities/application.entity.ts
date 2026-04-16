@@ -33,16 +33,18 @@ export class ApplicationEntity {
   @Column({ type: 'text', nullable: true })
   note!: string | null;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ name: 'applied_at', type: 'timestamptz', default: () => 'now()' })
   appliedAt!: Date;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 
-  @ManyToOne(() => JobEntity, (job) => job.applications, { onDelete: 'CASCADE' })
+  @ManyToOne(() => JobEntity, (job) => job.applications, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'job_id' })
   job!: JobEntity;
 
@@ -58,4 +60,5 @@ export class ApplicationEntity {
   @JoinColumn({ name: 'reviewer_id' })
   reviewer!: UserEntity | null;
 }
+
 
