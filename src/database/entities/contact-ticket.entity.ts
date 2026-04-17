@@ -28,4 +28,3 @@ export class ContactTicketEntity {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }
-

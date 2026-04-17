@@ -21,4 +21,3 @@ export class SavedJobEntity {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }
-

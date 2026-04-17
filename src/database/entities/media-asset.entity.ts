@@ -16,6 +16,12 @@ export class MediaAssetEntity {
   @Column({ name: 'file_url', type: 'varchar', length: 255 })
   fileUrl!: string;
 
+  @Column({ name: 'storage_provider', type: 'varchar', length: 40, default: 'local' })
+  storageProvider!: string;
+
+  @Column({ name: 'storage_key', type: 'varchar', length: 255, default: '' })
+  storageKey!: string;
+
   @Column({ name: 'mime_type', type: 'varchar', length: 120 })
   mimeType!: string;
 
@@ -31,4 +37,3 @@ export class MediaAssetEntity {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }
-

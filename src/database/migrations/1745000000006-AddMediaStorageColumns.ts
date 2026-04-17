@@ -19,4 +19,3 @@ export class AddMediaStorageColumns1745000000006 implements MigrationInterface {
     `);
   }
 }
-

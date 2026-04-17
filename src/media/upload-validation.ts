@@ -14,7 +14,10 @@ export type ValidatedImageMeta = {
   height: number;
 };
 
-const MIME_TO_EXT: Record<ValidatedImageMeta['mimeType'], ValidatedImageMeta['extension']> = {
+const MIME_TO_EXT: Record<
+  ValidatedImageMeta['mimeType'],
+  ValidatedImageMeta['extension']
+> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
   'image/gif': '.gif',
@@ -69,7 +72,10 @@ export function validateImageUpload(
   const dimensions = readImageDimensions(file.buffer, detected);
   const megapixels = (dimensions.width * dimensions.height) / 1_000_000;
 
-  if (dimensions.width > limits.maxWidth || dimensions.height > limits.maxHeight) {
+  if (
+    dimensions.width > limits.maxWidth ||
+    dimensions.height > limits.maxHeight
+  ) {
     throw new BadRequestException({
       code: 'VALIDATION_ERROR',
       message: `Image dimensions exceed limit ${limits.maxWidth}x${limits.maxHeight}.`,
@@ -163,7 +169,9 @@ function readImageDimensions(
 
       const marker = buffer[offset + 1];
       const isStartOfFrame =
-        marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        ![0xc4, 0xc8, 0xcc].includes(marker);
 
       if (isStartOfFrame) {
         const height = buffer.readUInt16BE(offset + 5);
@@ -181,7 +189,6 @@ function readImageDimensions(
     throw invalidDimensionError();
   }
 
-  // WEBP dimension parsing (VP8X, VP8, VP8L)
   let offset = 12;
   while (offset + 8 <= buffer.length) {
     const chunkType = buffer.toString('ascii', offset, offset + 4);
@@ -214,7 +221,8 @@ function readImageDimensions(
       const b2 = buffer[chunkDataStart + 3];
       const b3 = buffer[chunkDataStart + 4];
       const width = 1 + (((b1 & 0x3f) << 8) | b0);
-      const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+      const height =
+        1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
       return { width, height };
     }
 
@@ -230,4 +238,3 @@ function invalidDimensionError() {
     message: 'Could not determine image dimensions.',
   });
 }
-

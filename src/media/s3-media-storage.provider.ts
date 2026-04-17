@@ -8,6 +8,14 @@ import {
   StorageFileInput,
 } from './storage.provider';
 
+type AwsS3Module = {
+  S3Client: new (input: unknown) => {
+    send(command: unknown): Promise<void>;
+  };
+  PutObjectCommand: new (input: unknown) => unknown;
+  DeleteObjectCommand: new (input: unknown) => unknown;
+};
+
 @Injectable()
 export class S3MediaStorageProvider implements MediaStorageProvider {
   constructor(private readonly configService: ConfigService) {}
@@ -15,7 +23,9 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
   async storeFile(input: StorageFileInput): Promise<StoredMediaFile> {
     const bucket = this.readRequired('S3_BUCKET');
     const region = this.readRequired('S3_REGION');
-    const prefix = (this.configService.get<string>('S3_MEDIA_PREFIX', 'media') || 'media').replace(/^\/+|\/+$/g, '');
+    const prefix =
+      (this.configService.get<string>('S3_MEDIA_PREFIX', 'media') || 'media')
+        .replace(/^\/+|\/+$/g, '');
     const extension = this.inferExt(input.mimeType);
     const safeBaseName = this.toSafeBaseName(input.originalName);
     const key = `${prefix}/${randomUUID()}${extension}`;
@@ -60,17 +70,12 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
     );
   }
 
-  private loadAwsSdk(): {
-    S3Client: new (input: unknown) => {
-      send(command: unknown): Promise<void>;
-    };
-    PutObjectCommand: new (input: unknown) => unknown;
-    DeleteObjectCommand: new (input: unknown) => unknown;
-  } {
+  private loadAwsSdk(): AwsS3Module {
     try {
       const moduleName = '@aws-sdk/client-s3';
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require(moduleName);
+      const loaded: unknown = require(moduleName);
+      return loaded as AwsS3Module;
     } catch {
       throw new Error(
         'S3 driver requires @aws-sdk/client-s3. Install dependencies before enabling MEDIA_STORAGE_DRIVER=s3.',
@@ -84,7 +89,8 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
     const { S3Client } = this.loadAwsSdk();
 
     const accessKeyId = this.configService.get<string>('S3_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.configService.get<string>('S3_SECRET_ACCESS_KEY', '');
+    const secretAccessKey =
+      this.configService.get<string>('S3_SECRET_ACCESS_KEY', '');
     const sessionToken = this.configService.get<string>('S3_SESSION_TOKEN', '');
 
     const credentials =
@@ -103,7 +109,9 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
   }
 
   private buildPublicUrl(bucket: string, region: string, key: string): string {
-    const customBase = this.configService.get<string>('MEDIA_PUBLIC_BASE_URL', '').trim();
+    const customBase = this.configService
+      .get<string>('MEDIA_PUBLIC_BASE_URL', '')
+      .trim();
 
     if (customBase) {
       return `${customBase.replace(/\/$/, '')}/${key}`;

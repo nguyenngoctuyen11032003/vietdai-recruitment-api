@@ -27,7 +27,10 @@ const SAFE_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 
 const stripUnsafeTags = (input: string): string =>
   input
-    .replace(/<\/?(script|style|iframe|object|embed|link|meta|svg|math)[^>]*>/gi, '')
+    .replace(
+      /<\/?(script|style|iframe|object|embed|link|meta|svg|math)[^>]*>/gi,
+      '',
+    )
     .replace(/<!--([\s\S]*?)-->/g, '');
 
 const sanitizeUrl = (value: string): string => {
@@ -92,7 +95,8 @@ export function sanitizeRichText(input: string | null): string | null {
     ]);
 
     const attrs: string[] = [];
-    const attrRegex = /([a-zA-Z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
+    const attrRegex =
+      /([a-zA-Z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
     let match: RegExpExecArray | null;
 
     while ((match = attrRegex.exec(content)) !== null) {
@@ -135,4 +139,5 @@ export function sanitizeRichText(input: string | null): string | null {
       : `<${tagName}${suffix}>`;
   });
 }
+
 

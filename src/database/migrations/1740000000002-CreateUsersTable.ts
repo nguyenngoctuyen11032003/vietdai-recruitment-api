@@ -26,4 +26,3 @@ export class CreateUsersTable1740000000002 implements MigrationInterface {
     await queryRunner.query('DROP TABLE IF EXISTS "users";');
   }
 }
-

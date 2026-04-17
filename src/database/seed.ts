@@ -38,7 +38,9 @@ async function seed() {
     const contactRepository = dataSource.getRepository(ContactTicketEntity);
     const savedJobRepository = dataSource.getRepository(SavedJobEntity);
     const notificationRepository = dataSource.getRepository(NotificationEntity);
-    const resetTokenRepository = dataSource.getRepository(PasswordResetTokenEntity);
+    const resetTokenRepository = dataSource.getRepository(
+      PasswordResetTokenEntity,
+    );
 
     const adminPasswordHash = await hashPassword('123123Ab');
     const demoPasswordHash = await hashPassword('Demo@1234');
@@ -86,7 +88,8 @@ async function seed() {
           salaryText: '28,000 - 38,000 TWD/month',
           currency: 'TWD',
           status: 'active',
-          description: '<p>Stable factory role with overtime opportunities.</p>',
+          description:
+            '<p>Stable factory role with overtime opportunities.</p>',
           responsibilities: '<ul><li>Operate production line tools</li></ul>',
           requirements: '<ul><li>Basic technical understanding</li></ul>',
           applicationMethod: 'hr@taipei-precision.example',

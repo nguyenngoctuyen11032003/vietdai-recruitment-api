@@ -48,6 +48,44 @@ export const validateEnv = (config: EnvInput): EnvInput => {
     throw new Error('PORT must be an integer between 1 and 65535');
   }
 
+  const mediaUploadDir =
+    (config.MEDIA_UPLOAD_DIR as string | undefined)?.trim() || 'uploads';
+  const mediaStorageDriver =
+    (config.MEDIA_STORAGE_DRIVER as string | undefined)?.trim().toLowerCase() ||
+    'local';
+  if (!['local', 's3'].includes(mediaStorageDriver)) {
+    throw new Error('MEDIA_STORAGE_DRIVER must be local or s3');
+  }
+
+  const mediaPublicBaseUrl =
+    (config.MEDIA_PUBLIC_BASE_URL as string | undefined)?.trim() ||
+    `http://localhost:${port}/uploads`;
+
+  const mediaMaxFileSizeBytes = toNumber(
+    config.MEDIA_MAX_FILE_SIZE_BYTES,
+    5 * 1024 * 1024,
+  );
+  const mediaMaxImageWidth = toNumber(config.MEDIA_MAX_IMAGE_WIDTH, 4096);
+  const mediaMaxImageHeight = toNumber(config.MEDIA_MAX_IMAGE_HEIGHT, 4096);
+  const mediaMaxImageMegapixels = toNumber(
+    config.MEDIA_MAX_IMAGE_MEGAPIXELS,
+    16,
+  );
+
+  if (
+    mediaStorageDriver === 's3' &&
+    !(config.S3_BUCKET as string | undefined)?.trim()
+  ) {
+    throw new Error('S3_BUCKET is required when MEDIA_STORAGE_DRIVER=s3');
+  }
+
+  if (
+    mediaStorageDriver === 's3' &&
+    !(config.S3_REGION as string | undefined)?.trim()
+  ) {
+    throw new Error('S3_REGION is required when MEDIA_STORAGE_DRIVER=s3');
+  }
+
   return {
     ...config,
     NODE_ENV: nodeEnv,
@@ -55,7 +93,19 @@ export const validateEnv = (config: EnvInput): EnvInput => {
     DB_SSL: toBoolean(config.DB_SSL, false),
     DB_LOGGING: toBoolean(config.DB_LOGGING, false),
     DB_RUN_MIGRATIONS: toBoolean(config.DB_RUN_MIGRATIONS, false),
+    MEDIA_STORAGE_DRIVER: mediaStorageDriver,
+    MEDIA_UPLOAD_DIR: mediaUploadDir,
+    MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
+    MEDIA_MAX_FILE_SIZE_BYTES: mediaMaxFileSizeBytes,
+    MEDIA_MAX_IMAGE_WIDTH: mediaMaxImageWidth,
+    MEDIA_MAX_IMAGE_HEIGHT: mediaMaxImageHeight,
+    MEDIA_MAX_IMAGE_MEGAPIXELS: mediaMaxImageMegapixels,
+    S3_BUCKET: (config.S3_BUCKET as string | undefined)?.trim(),
+    S3_REGION: (config.S3_REGION as string | undefined)?.trim(),
+    S3_ACCESS_KEY_ID: (config.S3_ACCESS_KEY_ID as string | undefined)?.trim(),
+    S3_SECRET_ACCESS_KEY: (config.S3_SECRET_ACCESS_KEY as string | undefined)?.trim(),
+    S3_SESSION_TOKEN: (config.S3_SESSION_TOKEN as string | undefined)?.trim(),
+    S3_MEDIA_PREFIX:
+      (config.S3_MEDIA_PREFIX as string | undefined)?.trim() || 'media',
   };
 };
-
-

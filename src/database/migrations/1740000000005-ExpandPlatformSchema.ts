@@ -127,7 +127,9 @@ export class ExpandPlatformSchema1740000000005 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS "idx_notifications_user_read";');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "idx_notifications_user_read";',
+    );
     await queryRunner.query('DROP TABLE IF EXISTS "notifications";');
     await queryRunner.query('DROP TABLE IF EXISTS "saved_jobs";');
     await queryRunner.query('DROP TABLE IF EXISTS "contact_tickets";');
@@ -136,7 +138,9 @@ export class ExpandPlatformSchema1740000000005 implements MigrationInterface {
     await queryRunner.query('DROP INDEX IF EXISTS "idx_blog_posts_status";');
     await queryRunner.query('DROP TABLE IF EXISTS "blog_posts";');
 
-    await queryRunner.query('ALTER TABLE "applications" DROP COLUMN IF EXISTS "score";');
+    await queryRunner.query(
+      'ALTER TABLE "applications" DROP COLUMN IF EXISTS "score";',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "candidates"
@@ -166,4 +170,3 @@ export class ExpandPlatformSchema1740000000005 implements MigrationInterface {
     `);
   }
 }
-

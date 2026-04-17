@@ -24,6 +24,15 @@ Optional:
 - `DB_SSL` (`true`/`false`, default `false`)
 - `DB_LOGGING` (`true`/`false`, default `false`)
 - `DB_RUN_MIGRATIONS` (`true`/`false`, default `false`)
+- `MEDIA_STORAGE_DRIVER` (`local` | `s3`, default `local`)
+- `MEDIA_UPLOAD_DIR` (default `uploads`)
+- `MEDIA_PUBLIC_BASE_URL` (default `http://localhost:3001/uploads`)
+- `MEDIA_MAX_FILE_SIZE_BYTES` (default `5242880`)
+- `MEDIA_MAX_IMAGE_WIDTH` (default `4096`)
+- `MEDIA_MAX_IMAGE_HEIGHT` (default `4096`)
+- `MEDIA_MAX_IMAGE_MEGAPIXELS` (default `16`)
+- `S3_BUCKET`, `S3_REGION` (required when `MEDIA_STORAGE_DRIVER=s3`)
+- `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_SESSION_TOKEN`, `S3_MEDIA_PREFIX`
 
 ## 3) Migration commands
 
@@ -53,7 +62,18 @@ npm run start:dev
 
 Server starts on `http://localhost:3001` by default.
 
-## 5) Production deploy checklist
+## 5) Seed sample data
+
+```bash
+npm run seed
+```
+
+Seed includes all tables and creates admin account:
+
+- email: `tt98tuyen@gmail.com`
+- password: `123123Ab`
+
+## 6) Production deploy checklist
 
 1. Set all production env vars (`DATABASE_URL`, `DB_SSL`, `NODE_ENV=production`).
 2. Build app: `npm run build`.

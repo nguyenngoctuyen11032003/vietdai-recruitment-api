@@ -44,4 +44,3 @@ export class BlogPostEntity {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 }
-

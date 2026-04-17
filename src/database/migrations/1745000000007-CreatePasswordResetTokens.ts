@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreatePasswordResetTokens1745000000007
-  implements MigrationInterface
-{
+export class CreatePasswordResetTokens1745000000007 implements MigrationInterface {
   name = 'CreatePasswordResetTokens1745000000007';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -38,4 +36,5 @@ export class CreatePasswordResetTokens1745000000007
     await queryRunner.query('DROP TABLE IF EXISTS "password_reset_tokens";');
   }
 }
+
 

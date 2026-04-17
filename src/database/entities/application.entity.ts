@@ -30,6 +30,9 @@ export class ApplicationEntity {
   @Column({ type: 'varchar', length: 30, default: 'submitted' })
   status!: string;
 
+  @Column({ type: 'integer', nullable: true })
+  score!: number | null;
+
   @Column({ type: 'text', nullable: true })
   note!: string | null;
 
@@ -60,5 +63,3 @@ export class ApplicationEntity {
   @JoinColumn({ name: 'reviewer_id' })
   reviewer!: UserEntity | null;
 }
-
-

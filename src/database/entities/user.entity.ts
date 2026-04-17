@@ -22,6 +22,18 @@ export class UserEntity {
   @Column({ name: 'full_name', type: 'varchar', length: 120 })
   fullName!: string;
 
+  @Column({ name: 'phone_number', type: 'varchar', length: 30, nullable: true })
+  phoneNumber!: string | null;
+
+  @Column({ type: 'varchar', length: 30, default: 'editor' })
+  role!: string;
+
+  @Column({ type: 'varchar', length: 20, default: 'active' })
+  status!: string;
+
+  @Column({ name: 'is_verified', type: 'boolean', default: false })
+  isVerified!: boolean;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
@@ -34,5 +46,3 @@ export class UserEntity {
   @OneToMany(() => ApplicationEntity, (application) => application.reviewer)
   reviewedApplications!: ApplicationEntity[];
 }
-
-
