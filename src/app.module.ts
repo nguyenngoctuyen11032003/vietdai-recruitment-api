@@ -5,6 +5,8 @@ import { databaseEntities } from './database/entities';
 import { validateEnv } from './config/env.validation';
 import { AppController } from './app.controller';
 import { BackendAppService } from './app.service';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RolesGuard } from './auth/roles.guard';
 import { LocalMediaStorageProvider } from './media/local-media-storage.provider';
 import { MEDIA_STORAGE_PROVIDER } from './media/storage.provider';
 import { S3MediaStorageProvider } from './media/s3-media-storage.provider';
@@ -48,11 +50,17 @@ const databaseImports = shouldEnableDatabase
   controllers: [AppController],
   providers: [
     BackendAppService,
+    JwtAuthGuard,
+    RolesGuard,
     LocalMediaStorageProvider,
     S3MediaStorageProvider,
     {
       provide: MEDIA_STORAGE_PROVIDER,
-      inject: [ConfigService, LocalMediaStorageProvider, S3MediaStorageProvider],
+      inject: [
+        ConfigService,
+        LocalMediaStorageProvider,
+        S3MediaStorageProvider,
+      ],
       useFactory: (
         configService: ConfigService,
         localProvider: LocalMediaStorageProvider,

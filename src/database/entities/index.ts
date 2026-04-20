@@ -6,6 +6,7 @@ import { JobEntity } from './job.entity';
 import { MediaAssetEntity } from './media-asset.entity';
 import { NotificationEntity } from './notification.entity';
 import { PasswordResetTokenEntity } from './password-reset-token.entity';
+import { RefreshTokenEntity } from './refresh-token.entity';
 import { ReportEntity } from './report.entity';
 import { SavedJobEntity } from './saved-job.entity';
 import { UserEntity } from './user.entity';
@@ -22,6 +23,7 @@ export const databaseEntities = [
   SavedJobEntity,
   NotificationEntity,
   PasswordResetTokenEntity,
+  RefreshTokenEntity,
 ];
 
 export {
@@ -33,6 +35,7 @@ export {
   MediaAssetEntity,
   NotificationEntity,
   PasswordResetTokenEntity,
+  RefreshTokenEntity,
   ReportEntity,
   SavedJobEntity,
   UserEntity,

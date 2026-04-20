@@ -1,5 +1,10 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
+import {
+  createHmac,
+  randomBytes,
+  scrypt as scryptCallback,
+  timingSafeEqual,
+} from 'crypto';
 import { promisify } from 'util';
 import { DataSource, IsNull, MoreThan } from 'typeorm';
 import {
@@ -8,10 +13,12 @@ import {
   JobEntity,
   MediaAssetEntity,
   PasswordResetTokenEntity,
+  RefreshTokenEntity,
   ReportEntity,
   UserEntity,
 } from './database/entities';
 import { sanitizeRichText } from './common/sanitize-rich-text';
+import type { AccessTokenPayload, AuthenticatedUser } from './auth/auth.types';
 import { MEDIA_STORAGE_PROVIDER } from './media/storage.provider';
 import type { MediaStorageProvider } from './media/storage.provider';
 import { validateImageUpload } from './media/upload-validation';
@@ -21,6 +28,19 @@ type UserRecord = {
   email: string;
   fullName: string;
   password: string;
+  role: string;
+  status: string;
+};
+
+type FallbackRefreshTokenRecord = {
+  userId: string;
+  expiresAt: number;
+  revokedAt: number | null;
+};
+
+type FallbackPasswordResetTokenRecord = {
+  userId: string;
+  expiresAt: number;
 };
 
 const scrypt = promisify(scryptCallback);
@@ -40,8 +60,23 @@ export class BackendAppService {
       email: 'demo@xkld.vn',
       fullName: 'Demo User',
       password: 'Demo@1234',
+      role: 'candidate',
+      status: 'active',
+    },
+    {
+      id: '2',
+      email: 'admin@xkld.vn',
+      fullName: 'Admin User',
+      password: 'Admin@1234',
+      role: 'admin',
+      status: 'active',
     },
   ];
+  private fallbackRefreshTokens = new Map<string, FallbackRefreshTokenRecord>();
+  private fallbackPasswordResetTokens = new Map<
+    string,
+    FallbackPasswordResetTokenRecord
+  >();
 
   constructor(
     @Optional() @Inject(DataSource) private readonly dataSource?: DataSource,
@@ -93,7 +128,7 @@ export class BackendAppService {
 
       return {
         ok: true,
-        data: this.buildAuthResponseFromDbUser(user),
+        data: await this.issueAuthSessionForDbUser(user),
       };
     }
 
@@ -112,7 +147,7 @@ export class BackendAppService {
 
     return {
       ok: true,
-      data: this.buildAuthResponseFromFallbackUser(user),
+      data: this.issueAuthSessionForFallbackUser(user),
     };
   }
 
@@ -187,11 +222,13 @@ export class BackendAppService {
       const saved = await repository.save(created);
       return {
         ok: true,
-        data: this.buildAuthResponseFromDbUser(saved),
+        data: await this.issueAuthSessionForDbUser(saved),
       };
     }
 
-    const existed = this.users.some((item) => item.email.toLowerCase() === email);
+    const existed = this.users.some(
+      (item) => item.email.toLowerCase() === email,
+    );
 
     if (existed) {
       return {
@@ -206,18 +243,21 @@ export class BackendAppService {
       email,
       fullName: `${firstName} ${lastName}`.trim(),
       password,
+      role: 'candidate',
+      status: 'active',
     };
 
     this.users.unshift(user);
 
     return {
       ok: true,
-      data: this.buildAuthResponseFromFallbackUser(user),
+      data: this.issueAuthSessionForFallbackUser(user),
     };
   }
 
   async forgotPassword(input: { email?: string }) {
     const email = (input.email || '').trim().toLowerCase();
+    let debugToken: string | null = null;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return {
@@ -229,14 +269,16 @@ export class BackendAppService {
 
     if (this.hasDatabase()) {
       const userRepository = this.dataSource!.getRepository(UserEntity);
-      const tokenRepository =
-        this.dataSource!.getRepository(PasswordResetTokenEntity);
+      const tokenRepository = this.dataSource!.getRepository(
+        PasswordResetTokenEntity,
+      );
       const user = await userRepository.findOne({ where: { email } });
 
       if (user) {
         const token = randomBytes(32).toString('hex');
         const tokenHash = await this.hashPassword(token);
         const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+        debugToken = token;
 
         const tokenEntity = tokenRepository.create({
           userId: user.id,
@@ -246,12 +288,25 @@ export class BackendAppService {
         });
         await tokenRepository.save(tokenEntity);
       }
+    } else {
+      const user = this.users.find((item) => item.email === email);
+      if (user) {
+        const token = randomBytes(32).toString('hex');
+        this.fallbackPasswordResetTokens.set(token, {
+          userId: user.id,
+          expiresAt: Date.now() + 1000 * 60 * 30,
+        });
+        debugToken = token;
+      }
     }
 
     return {
       ok: true,
       data: {
         message: 'Password reset link has been sent if your email exists.',
+        ...(process.env.NODE_ENV === 'production' || !debugToken
+          ? {}
+          : { debugResetToken: debugToken }),
       },
     };
   }
@@ -290,14 +345,44 @@ export class BackendAppService {
     }
 
     if (!this.hasDatabase()) {
+      const fallbackToken = this.fallbackPasswordResetTokens.get(token);
+      if (
+        !fallbackToken ||
+        fallbackToken.expiresAt <= Date.now() ||
+        !this.users.find((item) => item.id === fallbackToken.userId)
+      ) {
+        return {
+          ok: false,
+          code: 'INVALID_TOKEN',
+          message: 'Reset token is invalid or expired.',
+        };
+      }
+
+      const targetUser = this.users.find(
+        (item) => item.id === fallbackToken.userId,
+      );
+      if (!targetUser) {
+        return {
+          ok: false,
+          code: 'INVALID_TOKEN',
+          message: 'Reset token is invalid or expired.',
+        };
+      }
+
+      targetUser.password = password;
+      this.fallbackPasswordResetTokens.delete(token);
+
       return {
-        ok: false,
-        code: 'NOT_AVAILABLE',
-        message: 'Password reset is unavailable while database is offline.',
+        ok: true,
+        data: {
+          message: 'Password has been reset successfully.',
+        },
       };
     }
 
-    const tokenRepository = this.dataSource!.getRepository(PasswordResetTokenEntity);
+    const tokenRepository = this.dataSource!.getRepository(
+      PasswordResetTokenEntity,
+    );
     const userRepository = this.dataSource!.getRepository(UserEntity);
 
     const activeTokens = await tokenRepository.find({
@@ -326,7 +411,9 @@ export class BackendAppService {
       };
     }
 
-    const user = await userRepository.findOne({ where: { id: matchedToken.userId } });
+    const user = await userRepository.findOne({
+      where: { id: matchedToken.userId },
+    });
     if (!user) {
       return {
         ok: false,
@@ -345,6 +432,133 @@ export class BackendAppService {
       ok: true,
       data: {
         message: 'Password has been reset successfully.',
+      },
+    };
+  }
+
+  async changePassword(
+    userId: string,
+    input: {
+      currentPassword?: string;
+      newPassword?: string;
+      confirmPassword?: string;
+    },
+  ) {
+    const currentPassword = input.currentPassword || '';
+    const newPassword = input.newPassword || '';
+    const confirmPassword = input.confirmPassword || '';
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        message:
+          'currentPassword, newPassword and confirmPassword are required.',
+      };
+    }
+
+    if (newPassword.length < 8) {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Password must be at least 8 characters.',
+      };
+    }
+
+    if (newPassword !== confirmPassword) {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Password confirmation does not match.',
+      };
+    }
+
+    if (currentPassword === newPassword) {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        message: 'New password must be different from current password.',
+      };
+    }
+
+    if (this.hasDatabase()) {
+      const userRepository = this.dataSource!.getRepository(UserEntity);
+      const tokenRepository = this.dataSource!.getRepository(
+        RefreshTokenEntity,
+      );
+      const user = await userRepository.findOne({
+        where: { id: userId, isActive: true },
+      });
+
+      if (!user) {
+        return {
+          ok: false,
+          code: 'UNAUTHORIZED',
+          message: 'Unauthorized.',
+        };
+      }
+
+      const isCurrentPasswordValid = await this.verifyPassword(
+        currentPassword,
+        user.passwordHash,
+      );
+      if (!isCurrentPasswordValid) {
+        return {
+          ok: false,
+          code: 'INVALID_CREDENTIALS',
+          message: 'Current password is incorrect.',
+        };
+      }
+
+      user.passwordHash = await this.hashPassword(newPassword);
+      await userRepository.save(user);
+
+      await tokenRepository.update(
+        { userId, revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+
+      return {
+        ok: true,
+        data: {
+          message: 'Password changed successfully. Please sign in again.',
+        },
+      };
+    }
+
+    const user = this.users.find((item) => item.id === userId);
+    if (!user) {
+      return {
+        ok: false,
+        code: 'UNAUTHORIZED',
+        message: 'Unauthorized.',
+      };
+    }
+
+    if (user.password !== currentPassword) {
+      return {
+        ok: false,
+        code: 'INVALID_CREDENTIALS',
+        message: 'Current password is incorrect.',
+      };
+    }
+
+    user.password = newPassword;
+
+    const now = Date.now();
+    for (const [token, record] of this.fallbackRefreshTokens.entries()) {
+      if (record.userId === userId && !record.revokedAt) {
+        this.fallbackRefreshTokens.set(token, {
+          ...record,
+          revokedAt: now,
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        message: 'Password changed successfully. Please sign in again.',
       },
     };
   }
@@ -707,7 +921,10 @@ export class BackendAppService {
     }
 
     const validatedImage = validateImageUpload(file, {
-      maxBytes: this.readNumberEnv('MEDIA_MAX_FILE_SIZE_BYTES', 5 * 1024 * 1024),
+      maxBytes: this.readNumberEnv(
+        'MEDIA_MAX_FILE_SIZE_BYTES',
+        5 * 1024 * 1024,
+      ),
       maxWidth: this.readNumberEnv('MEDIA_MAX_IMAGE_WIDTH', 4096),
       maxHeight: this.readNumberEnv('MEDIA_MAX_IMAGE_HEIGHT', 4096),
       maxMegapixels: this.readNumberEnv('MEDIA_MAX_IMAGE_MEGAPIXELS', 16),
@@ -823,8 +1040,193 @@ export class BackendAppService {
     return { deleted: true as const };
   }
 
+  getUserFromAccessToken(token: string): AuthenticatedUser | null {
+    const payload = this.verifyAccessToken(token);
+    if (!payload) {
+      return null;
+    }
+
+    return {
+      id: payload.sub,
+      email: payload.email,
+      fullName: payload.fullName,
+      role: payload.role,
+      status: payload.status,
+    };
+  }
+
+  async refreshSession(input: { refreshToken?: string }) {
+    const refreshToken = (input.refreshToken || '').trim();
+    if (!refreshToken) {
+      return {
+        ok: false,
+        code: 'UNAUTHORIZED',
+        message: 'Refresh token is required.',
+      };
+    }
+
+    if (this.hasDatabase()) {
+      const tokenRepository = this.dataSource!.getRepository(RefreshTokenEntity);
+      const userRepository = this.dataSource!.getRepository(UserEntity);
+
+      const tokenRows = await tokenRepository.find({
+        where: { revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+        order: { createdAt: 'DESC' },
+        take: 100,
+      });
+
+      let matchedToken: RefreshTokenEntity | null = null;
+      for (const row of tokenRows) {
+        const matched = await this.verifyPassword(refreshToken, row.tokenHash);
+        if (matched) {
+          matchedToken = row;
+          break;
+        }
+      }
+
+      if (!matchedToken) {
+        return {
+          ok: false,
+          code: 'UNAUTHORIZED',
+          message: 'Refresh token is invalid or expired.',
+        };
+      }
+
+      const user = await userRepository.findOne({
+        where: { id: matchedToken.userId, isActive: true },
+      });
+      if (!user) {
+        return {
+          ok: false,
+          code: 'UNAUTHORIZED',
+          message: 'Refresh token is invalid or expired.',
+        };
+      }
+
+      matchedToken.revokedAt = new Date();
+      await tokenRepository.save(matchedToken);
+      return {
+        ok: true,
+        data: await this.issueAuthSessionForDbUser(user),
+      };
+    }
+
+    const record = this.fallbackRefreshTokens.get(refreshToken);
+    if (!record || record.revokedAt || record.expiresAt <= Date.now()) {
+      return {
+        ok: false,
+        code: 'UNAUTHORIZED',
+        message: 'Refresh token is invalid or expired.',
+      };
+    }
+
+    const user = this.users.find((item) => item.id === record.userId);
+    if (!user) {
+      return {
+        ok: false,
+        code: 'UNAUTHORIZED',
+        message: 'Refresh token is invalid or expired.',
+      };
+    }
+
+    this.fallbackRefreshTokens.set(refreshToken, {
+      ...record,
+      revokedAt: Date.now(),
+    });
+
+    return {
+      ok: true,
+      data: this.issueAuthSessionForFallbackUser(user),
+    };
+  }
+
+  async logout(input: { refreshToken?: string }) {
+    const refreshToken = (input.refreshToken || '').trim();
+    if (!refreshToken) {
+      return { ok: true, data: { revoked: false } };
+    }
+
+    if (this.hasDatabase()) {
+      const tokenRepository = this.dataSource!.getRepository(RefreshTokenEntity);
+      const tokenRows = await tokenRepository.find({
+        where: { revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+        order: { createdAt: 'DESC' },
+        take: 100,
+      });
+
+      for (const row of tokenRows) {
+        if (await this.verifyPassword(refreshToken, row.tokenHash)) {
+          row.revokedAt = new Date();
+          await tokenRepository.save(row);
+          return { ok: true, data: { revoked: true } };
+        }
+      }
+
+      return { ok: true, data: { revoked: false } };
+    }
+
+    const record = this.fallbackRefreshTokens.get(refreshToken);
+    if (record && !record.revokedAt) {
+      this.fallbackRefreshTokens.set(refreshToken, {
+        ...record,
+        revokedAt: Date.now(),
+      });
+      return { ok: true, data: { revoked: true } };
+    }
+
+    return { ok: true, data: { revoked: false } };
+  }
+
   private hasDatabase() {
     return Boolean(this.dataSource && this.dataSource.isInitialized);
+  }
+
+  private async issueAuthSessionForDbUser(user: UserEntity) {
+    const accessToken = this.signAccessToken({
+      sub: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      status: user.status,
+    });
+    const refreshToken = await this.createDbRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      expiresInSeconds: this.getAccessTokenTtlSeconds(),
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        status: user.status,
+      },
+    };
+  }
+
+  private issueAuthSessionForFallbackUser(user: UserRecord) {
+    const accessToken = this.signAccessToken({
+      sub: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      status: user.status,
+    });
+    const refreshToken = this.createFallbackRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      expiresInSeconds: this.getAccessTokenTtlSeconds(),
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        status: user.status,
+      },
+    };
   }
 
   private ensureDatabase() {
@@ -868,6 +1270,135 @@ export class BackendAppService {
     return `${base}-${Date.now()}`;
   }
 
+  private getAccessTokenTtlSeconds() {
+    return this.readNumberEnv('AUTH_ACCESS_TOKEN_TTL_SECONDS', 60 * 15);
+  }
+
+  private getRefreshTokenTtlSeconds() {
+    return this.readNumberEnv(
+      'AUTH_REFRESH_TOKEN_TTL_SECONDS',
+      60 * 60 * 24 * 30,
+    );
+  }
+
+  private getAccessTokenSecret() {
+    return (
+      process.env.AUTH_ACCESS_TOKEN_SECRET ||
+      process.env.AUTH_SECRET ||
+      'xkld-dev-auth-secret'
+    );
+  }
+
+  private encodeBase64Url(value: string) {
+    return Buffer.from(value, 'utf8').toString('base64url');
+  }
+
+  private decodeBase64Url(value: string) {
+    return Buffer.from(value, 'base64url').toString('utf8');
+  }
+
+  /* eslint-disable prettier/prettier */
+  private createTokenSignature(unsignedToken: string) {
+    return createHmac('sha256', this.getAccessTokenSecret())
+      .update(unsignedToken)
+      .digest('base64url');
+  }
+
+  private buildUnsignedToken(payload: AccessTokenPayload) {
+    const headerBase64 = this.encodeBase64Url('{"alg":"HS256","typ":"JWT"}');
+    const payloadBase64 = this.encodeBase64Url(JSON.stringify(payload));
+    return `${headerBase64}.${payloadBase64}`;
+  }
+
+  private signAccessToken(
+    input: Omit<AccessTokenPayload, 'iat' | 'exp'>,
+  ) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const payload: AccessTokenPayload = {
+      ...input,
+      iat: nowSeconds,
+      exp: nowSeconds + this.getAccessTokenTtlSeconds(),
+    };
+
+    const unsignedToken = this.buildUnsignedToken(payload);
+    return `${unsignedToken}.${this.createTokenSignature(unsignedToken)}`;
+  }
+  /* eslint-enable prettier/prettier */
+
+  private verifyAccessToken(token: string): AccessTokenPayload | null {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const [headerBase64, payloadBase64, signature] = parts;
+    if (!headerBase64 || !payloadBase64 || !signature) {
+      return null;
+    }
+
+    const unsignedToken = `${headerBase64}.${payloadBase64}`;
+    const expectedSignature = this.createTokenSignature(unsignedToken);
+
+    const providedBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expectedSignature);
+    if (providedBuffer.length !== expectedBuffer.length) {
+      return null;
+    }
+
+    if (!timingSafeEqual(providedBuffer, expectedBuffer)) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(
+        this.decodeBase64Url(payloadBase64),
+      ) as AccessTokenPayload;
+
+      if (!payload.sub || !payload.email || !payload.exp) {
+        return null;
+      }
+
+      if (payload.exp <= Math.floor(Date.now() / 1000)) {
+        return null;
+      }
+
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  private async createDbRefreshToken(userId: string): Promise<string> {
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = await this.hashPassword(rawToken);
+    const tokenRepository = this.dataSource!.getRepository(RefreshTokenEntity);
+    const expiresAt = new Date(
+      Date.now() + this.getRefreshTokenTtlSeconds() * 1000,
+    );
+    const tokenEntity = tokenRepository.create({
+      userId,
+      tokenHash,
+      expiresAt,
+      revokedAt: null,
+      ipAddress: null,
+      userAgent: null,
+    });
+
+    await tokenRepository.save(tokenEntity);
+    return rawToken;
+  }
+
+  private createFallbackRefreshToken(userId: string): string {
+    const rawToken = randomBytes(32).toString('hex');
+    this.fallbackRefreshTokens.set(rawToken, {
+      userId,
+      expiresAt: Date.now() + this.getRefreshTokenTtlSeconds() * 1000,
+      revokedAt: null,
+    });
+
+    return rawToken;
+  }
+
   private async hashPassword(password: string): Promise<string> {
     const salt = randomBytes(16).toString('hex');
     const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
@@ -876,8 +1407,12 @@ export class BackendAppService {
 
   private async verifyPassword(
     password: string,
-    storedHash: string,
+    storedHash?: string | null,
   ): Promise<boolean> {
+    if (typeof storedHash !== 'string' || storedHash.length === 0) {
+      return false;
+    }
+
     const [salt, hash] = storedHash.split(':');
     if (!salt || !hash) {
       return password === storedHash;
@@ -891,29 +1426,5 @@ export class BackendAppService {
     }
 
     return timingSafeEqual(hashBuffer, derivedKey);
-  }
-
-  private buildAuthResponseFromFallbackUser(user: UserRecord) {
-    return {
-      accessToken: `demo-token-${user.id}-${Date.now()}`,
-      expiresInSeconds: 60 * 60 * 24 * 7,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-      },
-    };
-  }
-
-  private buildAuthResponseFromDbUser(user: UserEntity) {
-    return {
-      accessToken: `demo-token-${user.id}-${Date.now()}`,
-      expiresInSeconds: 60 * 60 * 24 * 7,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-      },
-    };
   }
 }

@@ -29,6 +29,9 @@ const toNumber = (value: unknown, fallback: number): number => {
 };
 
 export const validateEnv = (config: EnvInput): EnvInput => {
+  const isWatchMode = process.argv.includes('--watch');
+  const lifecycleEvent = (process.env.npm_lifecycle_event || '').toLowerCase();
+  const isDevRun = isWatchMode || lifecycleEvent === 'start:dev';
   const nodeEnv =
     (config.NODE_ENV as string | undefined) ??
     (process.env.JEST_WORKER_ID ? 'test' : 'development');
@@ -50,6 +53,18 @@ export const validateEnv = (config: EnvInput): EnvInput => {
 
   const mediaUploadDir =
     (config.MEDIA_UPLOAD_DIR as string | undefined)?.trim() || 'uploads';
+  const accessTokenSecret =
+    (config.AUTH_ACCESS_TOKEN_SECRET as string | undefined)?.trim() ||
+    (config.AUTH_SECRET as string | undefined)?.trim() ||
+    'xkld-dev-auth-secret';
+  const accessTokenTtlSeconds = toNumber(
+    config.AUTH_ACCESS_TOKEN_TTL_SECONDS,
+    60 * 15,
+  );
+  const refreshTokenTtlSeconds = toNumber(
+    config.AUTH_REFRESH_TOKEN_TTL_SECONDS,
+    60 * 60 * 24 * 30,
+  );
   const mediaStorageDriver =
     (config.MEDIA_STORAGE_DRIVER as string | undefined)?.trim().toLowerCase() ||
     'local';
@@ -86,6 +101,16 @@ export const validateEnv = (config: EnvInput): EnvInput => {
     throw new Error('S3_REGION is required when MEDIA_STORAGE_DRIVER=s3');
   }
 
+  if (
+    nodeEnv === 'production' &&
+    !isDevRun &&
+    accessTokenSecret === 'xkld-dev-auth-secret'
+  ) {
+    throw new Error(
+      'AUTH_ACCESS_TOKEN_SECRET (or AUTH_SECRET) must be set in production',
+    );
+  }
+
   return {
     ...config,
     NODE_ENV: nodeEnv,
@@ -94,6 +119,9 @@ export const validateEnv = (config: EnvInput): EnvInput => {
     DB_LOGGING: toBoolean(config.DB_LOGGING, false),
     DB_RUN_MIGRATIONS: toBoolean(config.DB_RUN_MIGRATIONS, false),
     MEDIA_STORAGE_DRIVER: mediaStorageDriver,
+    AUTH_ACCESS_TOKEN_SECRET: accessTokenSecret,
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: accessTokenTtlSeconds,
+    AUTH_REFRESH_TOKEN_TTL_SECONDS: refreshTokenTtlSeconds,
     MEDIA_UPLOAD_DIR: mediaUploadDir,
     MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
     MEDIA_MAX_FILE_SIZE_BYTES: mediaMaxFileSizeBytes,
@@ -103,7 +131,8 @@ export const validateEnv = (config: EnvInput): EnvInput => {
     S3_BUCKET: (config.S3_BUCKET as string | undefined)?.trim(),
     S3_REGION: (config.S3_REGION as string | undefined)?.trim(),
     S3_ACCESS_KEY_ID: (config.S3_ACCESS_KEY_ID as string | undefined)?.trim(),
-    S3_SECRET_ACCESS_KEY: (config.S3_SECRET_ACCESS_KEY as string | undefined)?.trim(),
+    S3_SECRET_ACCESS_KEY:
+      (config.S3_SECRET_ACCESS_KEY as string | undefined)?.trim(),
     S3_SESSION_TOKEN: (config.S3_SESSION_TOKEN as string | undefined)?.trim(),
     S3_MEDIA_PREFIX:
       (config.S3_MEDIA_PREFIX as string | undefined)?.trim() || 'media',

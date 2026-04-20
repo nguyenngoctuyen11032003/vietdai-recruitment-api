@@ -1,0 +1,1 @@
+export { RolesGuard } from '../auth/roles.guard';
