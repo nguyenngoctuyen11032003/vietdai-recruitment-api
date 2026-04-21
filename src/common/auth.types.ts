@@ -3,4 +3,3 @@ export type {
   AuthenticatedRequest,
   AuthenticatedUser,
 } from '../auth/auth.types';
-
